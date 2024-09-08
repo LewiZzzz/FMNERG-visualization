@@ -1,12 +1,16 @@
 import streamlit as st
 import os
+import re
 import torch
+import time
 from PIL import Image
 from transformers import T5Tokenizer, T5Config
 from model.VisionT5 import VisionT5
 from model.T5FineTuner import T5FineTuner
 from util.inference import run_inference
 from util.visualization import draw_rectangles_with_labels_from_triplets
+from annotated_text import annotated_text
+
 
 # Streamlit 页面标题
 st.title("FMNER 可视化系统")
@@ -25,7 +29,7 @@ def create_config():
 
 
 # 加载模型和分词器
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def load_model_and_tokenizer(model_path, checkpoint_path):
     tokenizer = T5Tokenizer.from_pretrained(model_path)
     config = create_config()
@@ -73,11 +77,41 @@ if uploaded_image is not None:
         draw_rectangles_with_labels_from_triplets(triplets, coarse_dict, img_path_vinvl, image_path, output_image_path)
 
         # 显示识别结果
-        st.subheader("模型识别的命名实体结果：")
-        st.write(generated_text)
+        st.subheader("模型输出结果")
+        
+
+        st.success('Model Inferencing Succeeds!!!', icon="✅")
+
+        lines = generated_text.split('[SSEP]')
+
+        container = st.container()
+        
+        for line in lines:
+            container.write(line.strip())
+            
+
+        # 提取并美观展示命名实体
+        st.subheader("命名实体识别结果")
+        entity, coarse_label, fine_label = None, None, None
+        for line in lines:
+            # 匹配格式：<命名实体> is a [粗粒度标签] and a [细粒度标签]
+            match = re.search(r"(\w+) is a (\w+) and a (\w+), which is (\w+)", line)
+            if match:
+                entity = match.group(1)
+                coarse_label = match.group(2)
+                fine_label = match.group(3)
+            annotated_text(
+                (entity, "<ENTITY>"),
+                " is a ",
+                (coarse_label, "<COARSE_LABEL>"),
+                " and a ",
+                (fine_label, "<FINE_LABEL>"),
+            )
+            st.write("\n")
+
 
         # 显示处理后的图片
-        st.subheader("视觉对象定位的图片：")
+        st.subheader("视觉对象定位")
         st.image(output_image_path, caption="命名实体识别与对象定位", use_column_width=True)
     else:
         st.error(f"找不到与 {uploaded_image.name} 对应的 .npz 文件。请检查文件是否正确。")
