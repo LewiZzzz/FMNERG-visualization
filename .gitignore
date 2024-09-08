@@ -1,0 +1,6 @@
+# 忽略 model 文件夹下的 t5-base 和 test.ckpt
+/model/t5-base/
+/model/test.ckpt
+/.venv/
+/.idea/
+/__pychache__/
