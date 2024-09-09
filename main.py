@@ -95,7 +95,7 @@ if uploaded_image is not None:
         entity, coarse_label, fine_label = None, None, None
         for line in lines:
             # 匹配格式：<命名实体> is a [粗粒度标签] and a [细粒度标签]
-            match = re.search(r"(\w+) is a (\w+) and a (\w+), which is (\w+)", line)
+            match = re.search(r"(.+?) is a (\w+) and a (\w+), which is (\w+)", line)
             if match:
                 entity = match.group(1)
                 coarse_label = match.group(2)
