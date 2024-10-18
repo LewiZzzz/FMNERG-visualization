@@ -34,6 +34,14 @@ def prepare_single_example(sentence, tokenizer, img_path_vinvl, vinvl_region_num
 
     return tokenized_input, vis_feat, vis_attention_mask
 
+class EmptyResultError(Exception):
+    """自定义异常类，当返回结果为空时抛出"""
+    pass
+
+# 定义自定义异常类
+class EmptyGeneratedTextError(Exception):
+    """自定义异常类，当生成的文本为空时抛出"""
+    pass
 
 def run_inference(model, tokenizer, sentence, img_path_vinvl, vinvl_region_number=36):
     # 准备输入
@@ -50,11 +58,17 @@ def run_inference(model, tokenizer, sentence, img_path_vinvl, vinvl_region_numbe
             vis_feats=img_feat.to(model.device),
             vis_attention_mask=vis_attention_mask.to(model.device),
             max_length=200,
+            min_length=10,
             num_beams=1,
             vinvl_region_number=36
         )
 
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+
+    # 检查生成文本是否为空
+    if not generated_text.strip():
+        print("Generated text is empty.")
+        raise EmptyGeneratedTextError("The generated text is empty. Check the input data or model configuration.")
 
     print("generate_text:", generated_text)
 
@@ -62,11 +76,6 @@ def run_inference(model, tokenizer, sentence, img_path_vinvl, vinvl_region_numbe
 
     print("vis_pred:", vis_prediction)
 
-    # entity, fine_label, coarse_label, in_the_image, vis = extract_spans_para_quad_single(generated_text, vis_prediction)
-    #
-    # print("entity:", entity)
-    # print("fine_label", fine_label)
-    # print("coarse_label", coarse_label)
 
     triplets, coarse_dict = extract_spans_para_quad_single(generated_text, vis_prediction)
 
@@ -143,7 +152,7 @@ def extract_spans_para_quad_single(seq, vis_pred):
             elif 'in the image' in part_two:
                 in_the_image = True
             else:
-                raise ValueError("Invalid sentence structure")
+                raise ValueError(f"Invalid sentence structure in part_two: {part_two}")
 
             # 如果是 in_the_image 且 vis_pred 有足够的数据，则访问 vis_pred
             if in_the_image and idx < len(vis_pred):
@@ -152,13 +161,27 @@ def extract_spans_para_quad_single(seq, vis_pred):
                 vis = [None]
             idx += 1
 
+        except ValueError as ve:
+            print(f"ValueError occurred while parsing sentence: {s}. Error: {ve}")
+            entity, fine_label, coarse_label, in_the_image, vis = '', '', '', '', []
+        except IndexError as ie:
+            print(f"IndexError: vis_pred index out of range at idx {idx}. Error: {ie}")
+            entity, fine_label, coarse_label, in_the_image, vis = '', '', '', '', []
         except Exception as e:
-            print(f'Error in parsing sequence: {s}. Error: {e}')
+            print(f"Unexpected error in parsing sequence: {s}. Error: {e}")
             entity, fine_label, coarse_label, in_the_image, vis = '', '', '', '', []
 
-        triplets[str(entity) + ' ' + str(fine_label) + ' ' + str(in_the_image)] = vis
-        coarse_dict[str(entity) + ' ' + str(coarse_label) + ' ' + str(in_the_image)] = vis
+        # 检查 entity 和标签是否为空，如果为空，抛出自定义异常
+        if not entity or not fine_label or not coarse_label:
+            print(f"Parsed values are empty for sentence: {s}")
+            continue  # 跳过这一项，但不终止整个处理
+
+        triplets[f'{entity} {fine_label} {in_the_image}'] = vis
+        coarse_dict[f'{entity} {coarse_label} {in_the_image}'] = vis
+
+        # 在返回之前检查 triplets 或 coarse_dict 是否为空
+        if not triplets or not coarse_dict:
+            raise EmptyResultError("The extracted triplets or coarse dictionary is empty.")
 
     return triplets, coarse_dict
-
 
